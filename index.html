@@ -1,0 +1,29 @@
+<html>
+    <head>
+        <script src="elm.js"></script>
+    </head>
+
+    <body id="container">
+        <script>
+            var app = Elm.Main.init({
+                node: document.getElementById("container")
+            });
+
+            var cb = function(a) {
+                const pads = navigator.getGamepads();
+                if (pads[0]) {
+                                var pressed = pads[0].buttons[0].pressed;
+                                // https://developer.mozilla.org/en-US/docs/Web/API/Performance/now
+                                var now = performance.timing.navigationStart + performance.now();
+                                var timestamp = Math.round(now);
+                                var sample = {
+                                                "pressed": pressed,
+                                                "timestamp": timestamp
+                                };
+                                app.ports.onSample.send(sample);
+                }
+            };
+            var timer = setInterval(cb, 8);
+        </script>
+    </body>
+</html>
