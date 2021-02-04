@@ -2,3 +2,7 @@
 /elm-stuff
 .pid
 /public
+
+# firebase
+.firebase/
+.firebaserc
