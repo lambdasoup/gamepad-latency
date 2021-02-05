@@ -1,6 +1,7 @@
-.PHONY: debug clean watch release serve
+.PHONY: qa live test debug clean watch release serve
 
 src = src/*.elm src/index.html
+site = $(shell jq -r '.projects.default' .firebaserc)
 
 debug: $(src)
 	@mkdir -p public
@@ -24,3 +25,12 @@ watch:
 
 serve:
 	browser-sync public -w
+
+test: release
+	firebase emulators:start
+
+qa: release
+	firebase hosting:channel:deploy qa
+
+live:
+	firebase hosting:clone $(site):qa $(site):live
