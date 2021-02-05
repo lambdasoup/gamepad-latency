@@ -2,31 +2,86 @@
     <head>
         <script src="elm.js"></script>
         <title>Gamepad Latency</title>
+        <style>
+            /*
+               color scheme
+               #61892f dark green
+               #86c232 light green
+               #222629 dark (bg)
+               #474B4f dark grey
+               #6b6e70 light grey
+            */
+            body {
+                background-color: #222629;
+                color: white;
+                font-family: sans-serif;
+            }
+
+            a {
+                color: white;
+                text-decoration: none;
+            }
+
+            a:hover {
+                color: #86c232;
+            }
+
+            p {
+                color: #86c232;
+            }
+
+            h1 {
+                font-size: 50px;
+            }
+
+            #info {
+                font-size: 20px;
+                margin: 20px auto 20px auto;
+            }
+
+            #result {
+                font-size: 40px;
+                margin: 20px auto 20px auto;
+            }
+
+            #action {
+                display: block;
+            }
+
+            #graph {
+                display: block;
+            }
+        </style>
     </head>
 
     <body>
-        <div id="app">
-        </div>
+        <h1>Gamepad Latency</h1>
+        <p>Test your gamepad's latency</p>
+        <div id="app"></div>
         <script>
             var app = Elm.Main.init({
-                node: document.getElementById("app")
+                node: document.getElementById("app"),
             });
 
-            var cb = function(a) {
+            var cb = function (a) {
                 const pads = navigator.getGamepads();
                 if (pads[0]) {
-                                var pressed = pads[0].buttons[0].pressed;
-                                // https://developer.mozilla.org/en-US/docs/Web/API/Performance/now
-                                var now = performance.timing.navigationStart + performance.now();
-                                var timestamp = Math.round(now);
-                                var sample = {
-                                                "pressed": pressed,
-                                                "timestamp": timestamp
-                                };
-                                app.ports.onSample.send(sample);
+                    var pressed = pads[0].buttons[0].pressed;
+                    // https://developer.mozilla.org/en-US/docs/Web/API/Performance/now
+                    var now =
+                        performance.timing.navigationStart + performance.now();
+                    var timestamp = Math.round(now);
+                    var sample = {
+                        pressed: pressed,
+                        timestamp: timestamp,
+                    };
+                    app.ports.onSample.send(sample);
                 }
             };
             var timer = setInterval(cb, 8);
         </script>
+        <section id="footer">
+            <a href="http://github.com/lambdasoup/gamepad-latency">Github</a>
+        </section>
     </body>
 </html>

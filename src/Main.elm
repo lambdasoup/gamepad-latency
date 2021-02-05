@@ -158,10 +158,10 @@ subscriptions _ =
 view : Model -> Html Msg
 view model =
     div []
-        [ div [ Html.Attributes.style "margin" "auto" ]
+        [ div [ id "info" ]
             [ Html.text ((model.pushes |> List.length |> String.fromInt) ++ " pushes")
             ]
-        , div [ Html.Attributes.style "margin" "auto" ]
+        , div [ id "result" ]
             [ Html.text ((model.result |> String.fromInt) ++ " ms")
             ]
         , viewCircle model.pad model.phase
@@ -179,7 +179,7 @@ viewGraph targets allPushes time =
         [ width "1000"
         , height "200"
         , viewBox ("0 0 " ++ String.fromInt (phaseMs * 10) ++ " 2000")
-        , Svg.Attributes.style "display:block; margin:auto;"
+        , Svg.Attributes.id "action"
         ]
         (List.map
             (\tx ->
@@ -224,7 +224,7 @@ viewCircle pushed phase =
         [ width "400"
         , height "400"
         , viewBox "0 0 100 150"
-        , Svg.Attributes.style "display:block; margin:auto;"
+        , Svg.Attributes.id "graph"
         ]
         [ g []
             [ g
