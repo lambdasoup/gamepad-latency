@@ -1,20 +1,19 @@
-.PHONY: debug clean serve public
+.PHONY: debug clean serve release
 
-src = *.elm index.html
-out = public/elm.js public/index.html
+src = src/*.elm src/index.html
 
 debug: $(src)
 	mkdir -p public
-	cp index.html public/
-	elm make Main.elm --output public/elm.js --debug
+	cp src/index.html public/
+	elm make src/Main.elm --output public/elm.js --debug
 
 clean:
 	rm -rf public
 
-public: $(src)
+release: $(src)
 	mkdir -p public
-	cp index.html public/
-	elm make Main.elm --optimize --output public/elm.js
+	cp src/index.html public/
+	elm make src/Main.elm --optimize --output public/elm.js
 
 serve:
 	while true; do \
