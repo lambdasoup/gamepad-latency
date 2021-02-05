@@ -1,9 +1,9 @@
-.PHONY: debug clean serve release
+.PHONY: debug clean watch release serve
 
 src = src/*.elm src/index.html
 
 debug: $(src)
-	mkdir -p public
+	@mkdir -p public
 	cp src/index.html public/
 	elm make src/Main.elm --output public/elm.js --debug
 
@@ -11,15 +11,16 @@ clean:
 	rm -rf public
 
 release: $(src)
-	mkdir -p public
+	@mkdir -p public
 	cp src/index.html public/
 	elm make src/Main.elm --optimize --output public/elm.js
 
-serve:
+watch:
 	while true; do \
-		kill `cat .pid`; \
 		clear ;\
-		make debug; \
-		cd public; python -m SimpleHTTPServer & echo $$! > .pid; cd ..;\
-		inotifywait -qre close_write $(src); \
+		make debug --no-print-directory; \
+		inotifywait $(src); \
 	done
+
+serve:
+	browser-sync public -w
