@@ -2,6 +2,7 @@ module Main exposing (main)
 
 import Browser
 import Browser.Events exposing (onAnimationFrame)
+import Dict exposing (Dict)
 import Gamepad
 import Html exposing (Html, div)
 import Svg exposing (..)
@@ -20,22 +21,24 @@ main =
 
 
 type alias Model =
-    { pad : Bool
+    { pressed : Bool
     , phase : Phase
     , time : Posix
     , pushes : List Posix
     , targets : List Posix
     , result : Int
+    , gamepads : Dict Int Gamepad.Gamepad
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( { pad = False
+    ( { pressed = False
       , phase = 0.0
       , time = Time.millisToPosix 0
       , targets = []
       , pushes = []
+      , gamepads = Dict.empty
       , result = 0
       }
     , Cmd.none
@@ -45,6 +48,7 @@ init =
 type Msg
     = Frame Posix
     | OnInput Gamepad.Input
+    | OnConnectionChanged Gamepad.ConnectionChanged
 
 
 type ButtonAction
@@ -115,23 +119,36 @@ update msg model =
                 pushes =
                     case buttonAction model input of
                         Down ->
-                            List.append model.pushes [ input.t ]
+                            List.append model.pushes [ input.time ]
 
                         _ ->
                             model.pushes
             in
             ( { model
-                | pad = input.p
+                | pressed = input.pressed
                 , pushes = pushes
               }
             , Cmd.none
             )
+
+        OnConnectionChanged connectionChanged ->
+            case connectionChanged of
+                Gamepad.Connected gamepad ->
+                    ( { model | gamepads = Dict.insert gamepad.index gamepad model.gamepads }
+                    , Cmd.none
+                    )
+
+                Gamepad.Disconnected gamepad ->
+                    ( { model | gamepads = Dict.remove gamepad.index model.gamepads }
+                    , Cmd.none
+                    )
 
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
         [ Gamepad.onInput OnInput
+        , Gamepad.onConnectionChanged OnConnectionChanged
         , onAnimationFrame Frame
         ]
 
@@ -145,8 +162,22 @@ view model =
         , div [ id "result" ]
             [ Html.text ((model.result |> String.fromInt) ++ " ms")
             ]
-        , viewCircle model.pad model.phase
+        , viewGamepads model.gamepads
+        , viewCircle model.pressed model.phase
         , viewGraph model.targets model.pushes model.time
+        ]
+
+
+viewGamepads : Dict Int Gamepad.Gamepad -> Html Msg
+viewGamepads gamepads =
+    div [ id "gamepads" ]
+        [ if Dict.isEmpty gamepads then
+            text "No gamepads found - Connect and press a gamepad button to activate."
+
+          else
+            Dict.values gamepads
+                |> List.map (\gamepad -> Html.text gamepad.id)
+                |> div [ class "gamepad" ]
         ]
 
 
@@ -280,10 +311,10 @@ within10secsBefore t1 t2 =
 
 buttonAction : Model -> Gamepad.Input -> ButtonAction
 buttonAction model input =
-    if model.pad == input.p then
+    if model.pressed == input.pressed then
         None
 
-    else if model.pad && not input.p then
+    else if model.pressed && not input.pressed then
         Up
 
     else

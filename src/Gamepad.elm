@@ -1,46 +1,65 @@
-port module Gamepad exposing (Input, onInput)
+port module Gamepad exposing
+    ( ConnectionChanged(..)
+    , Gamepad
+    , Input
+    , onConnectionChanged
+    , onInput
+    )
 
-import Json.Decode
 import Time exposing (Posix)
 
 
-port onSample : (Json.Decode.Value -> msg) -> Sub msg
+port onInputInternal : (InputInternal -> msg) -> Sub msg
+
+
+port onGamepadConnected : (Gamepad -> msg) -> Sub msg
+
+
+port onGamepadDisconnected : (Gamepad -> msg) -> Sub msg
 
 
 type alias Pad =
     Bool
 
 
-type alias Input =
-    { t : Posix
-    , p : Pad
+type alias InputInternal =
+    { time : Int
+    , pressed : Pad
     }
 
 
-decodeInput : Json.Decode.Value -> Result Json.Decode.Error Input
-decodeInput =
-    Json.Decode.decodeValue
-        (Json.Decode.map2 Input
-            (Json.Decode.field "timestamp" posixDecoder)
-            (Json.Decode.field "pressed" Json.Decode.bool)
-        )
+type alias Input =
+    { time : Posix
+    , pressed : Pad
+    }
 
 
-posixDecoder : Json.Decode.Decoder Posix
-posixDecoder =
-    Json.Decode.map Time.millisToPosix Json.Decode.int
+type alias Gamepad =
+    { index : Int
+    , id : String
+    }
+
+
+type ConnectionChanged
+    = Connected Gamepad
+    | Disconnected Gamepad
+
+
+decodeInput : InputInternal -> Input
+decodeInput ii =
+    { time = Time.millisToPosix ii.time
+    , pressed = ii.pressed
+    }
+
+
+onConnectionChanged : (ConnectionChanged -> msg) -> Sub msg
+onConnectionChanged msg =
+    Sub.batch
+        [ onGamepadConnected (Connected >> msg)
+        , onGamepadDisconnected (Disconnected >> msg)
+        ]
 
 
 onInput : (Input -> msg) -> Sub msg
 onInput msg =
-    onSample (decodeInput >> unresult >> msg)
-
-
-unresult : Result Json.Decode.Error Input -> Input
-unresult result =
-    case result of
-        Ok sample ->
-            sample
-
-        Err _ ->
-            Input (Time.millisToPosix 0) False
+    onInputInternal (decodeInput >> msg)

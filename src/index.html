@@ -71,14 +71,27 @@
                     var now =
                         performance.timing.navigationStart + performance.now();
                     var timestamp = Math.round(now);
-                    var sample = {
+                    var input = {
                         pressed: pressed,
-                        timestamp: timestamp,
+                        time: timestamp,
                     };
-                    app.ports.onSample.send(sample);
+                    app.ports.onInputInternal.send(input);
                 }
             };
             var timer = setInterval(cb, 8);
+
+            window.addEventListener("gamepadconnected", function (e) {
+                app.ports.onGamepadConnected.send({
+                    index: e.gamepad.index,
+                    id: e.gamepad.id,
+                });
+            });
+            window.addEventListener("gamepaddisconnected", function (e) {
+                app.ports.onGamepadDisconnected.send({
+                    index: e.gamepad.index,
+                    id: e.gamepad.id,
+                });
+            });
         </script>
         <section id="footer">
             <a href="http://github.com/lambdasoup/gamepad-latency">Github</a>
