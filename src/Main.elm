@@ -1,16 +1,12 @@
-port module Main exposing (main)
+module Main exposing (main)
 
 import Browser
 import Browser.Events exposing (onAnimationFrame)
-import Html exposing (Html, div, text)
-import Html.Attributes
-import Json.Decode
+import Gamepad
+import Html exposing (Html, div)
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Time exposing (Posix)
-
-
-port onSample : (Json.Decode.Value -> msg) -> Sub msg
 
 
 main : Program () Model Msg
@@ -48,17 +44,7 @@ init =
 
 type Msg
     = Frame Posix
-    | OnSample (Result Json.Decode.Error Sample)
-
-
-type alias Pad =
-    Bool
-
-
-type alias Sample =
-    { t : Posix
-    , p : Pad
-    }
+    | OnInput Gamepad.Input
 
 
 type ButtonAction
@@ -124,33 +110,28 @@ update msg model =
             , Cmd.none
             )
 
-        OnSample sampleResult ->
-            case sampleResult of
-                Err err ->
-                    ( model, Cmd.none )
+        OnInput input ->
+            let
+                pushes =
+                    case buttonAction model input of
+                        Down ->
+                            List.append model.pushes [ input.t ]
 
-                Ok sample ->
-                    let
-                        pushes =
-                            case buttonAction model sample of
-                                Down ->
-                                    List.append model.pushes [ sample.t ]
-
-                                _ ->
-                                    model.pushes
-                    in
-                    ( { model
-                        | pad = sample.p
-                        , pushes = pushes
-                      }
-                    , Cmd.none
-                    )
+                        _ ->
+                            model.pushes
+            in
+            ( { model
+                | pad = input.p
+                , pushes = pushes
+              }
+            , Cmd.none
+            )
 
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ onSample (decodeSample >> OnSample)
+        [ Gamepad.onInput OnInput
         , onAnimationFrame Frame
         ]
 
@@ -297,30 +278,16 @@ within10secsBefore t1 t2 =
     10000 > (Time.posixToMillis t1 - Time.posixToMillis t2)
 
 
-buttonAction : Model -> Sample -> ButtonAction
-buttonAction model sample =
-    if model.pad == sample.p then
+buttonAction : Model -> Gamepad.Input -> ButtonAction
+buttonAction model input =
+    if model.pad == input.p then
         None
 
-    else if model.pad && not sample.p then
+    else if model.pad && not input.p then
         Up
 
     else
         Down
-
-
-decodeSample : Json.Decode.Value -> Result Json.Decode.Error Sample
-decodeSample =
-    Json.Decode.decodeValue
-        (Json.Decode.map2 Sample
-            (Json.Decode.field "timestamp" posixDecoder)
-            (Json.Decode.field "pressed" Json.Decode.bool)
-        )
-
-
-posixDecoder : Json.Decode.Decoder Posix
-posixDecoder =
-    Json.Decode.map Time.millisToPosix Json.Decode.int
 
 
 angle : Phase -> Float
