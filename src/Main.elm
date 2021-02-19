@@ -5,6 +5,7 @@ import Browser.Events exposing (onAnimationFrame)
 import Dict exposing (Dict)
 import Gamepad
 import Html exposing (Html, div)
+import Html.Attributes
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Time exposing (Posix)
@@ -26,7 +27,7 @@ type alias Model =
     , time : Posix
     , pushes : List Posix
     , targets : List Posix
-    , result : Int
+    , result : List Duration
     , gamepads : Dict Int Gamepad.Gamepad
     }
 
@@ -39,7 +40,7 @@ init =
       , targets = []
       , pushes = []
       , gamepads = Dict.empty
-      , result = 0
+      , result = []
       }
     , Cmd.none
     )
@@ -59,6 +60,10 @@ type ButtonAction
 
 type alias Phase =
     Float
+
+
+type Duration
+    = Duration Int
 
 
 phaseMs : Int
@@ -160,12 +165,16 @@ view model =
             [ Html.text ((model.pushes |> List.length |> String.fromInt) ++ " pushes")
             ]
         , div [ id "result" ]
-            [ Html.text ((model.result |> String.fromInt) ++ " ms")
-            ]
+            [ model.result |> mean |> viewDuration ]
         , viewGamepads model.gamepads
         , viewCircle model.pressed model.phase
-        , viewGraph model.targets model.pushes model.time
+        , viewGraph model.result
         ]
+
+
+viewDuration : Duration -> Html Msg
+viewDuration (Duration x) =
+    String.fromInt x ++ " ms" |> Html.text
 
 
 viewGamepads : Dict Int Gamepad.Gamepad -> Html Msg
@@ -181,52 +190,36 @@ viewGamepads gamepads =
         ]
 
 
-viewGraph : List Posix -> List Posix -> Posix -> Html Msg
-viewGraph targets allPushes time =
-    let
-        pushes =
-            allPushes
-    in
+viewGraph : List Duration -> Html Msg
+viewGraph ds =
     svg
-        [ width "1000"
-        , height "200"
-        , viewBox ("0 0 " ++ String.fromInt (phaseMs * 10) ++ " 2000")
+        [ width "800"
+        , height "400"
+        , viewBox "0 0 1000 500"
         , Svg.Attributes.id "action"
+        , Svg.Attributes.style "margin: auto"
         ]
-        (List.map
-            (\tx ->
-                let
-                    x =
-                        String.fromInt (Time.posixToMillis time - Time.posixToMillis tx)
-                in
-                line
-                    [ x1 x
-                    , y1 "0"
-                    , x2 x
-                    , y2 "2000"
-                    , stroke "#000"
-                    , strokeWidth "20"
-                    ]
-                    []
-            )
-            targets
-            ++ List.map
-                (\tx ->
-                    let
-                        x =
-                            String.fromInt (Time.posixToMillis time - Time.posixToMillis tx)
-                    in
-                    line
-                        [ x1 x
-                        , y1 "950"
-                        , x2 x
-                        , y2 "1050"
-                        , stroke "#f00"
-                        , strokeWidth "100"
+        (Svg.line
+            [ x1 "500"
+            , y1 "0"
+            , x2 "500"
+            , y2 "500"
+            , stroke "#bbb"
+            , strokeWidth "1"
+            ]
+            []
+            :: List.map
+                (\(Duration t) ->
+                    Svg.rect
+                        [ x (String.fromInt (t + 500))
+                        , y "250"
+                        , width "10"
+                        , height "10"
+                        , fill "#f00"
                         ]
                         []
                 )
-                pushes
+                ds
         )
 
 
@@ -279,8 +272,8 @@ viewCircle pushed phase =
         ]
 
 
-result : List Posix -> Int
-result ts =
+result : List Posix -> List Duration
+result =
     List.map
         (\t ->
             let
@@ -290,18 +283,23 @@ result ts =
                 mod =
                     modBy 1000 millis
 
-                nearest =
+                dist =
                     if mod < 500 then
-                        (millis // 1000) * 1000
+                        mod
 
                     else
-                        (millis // 1000 + 1) * 1000
+                        mod - 1000
             in
-            abs (millis - nearest)
+            Duration dist
         )
-        ts
+
+
+mean : List Duration -> Duration
+mean ds =
+    List.map (\(Duration xs) -> abs xs) ds
         |> List.sum
-        |> (\sum -> sum // List.length ts)
+        |> (\sum -> sum // List.length ds)
+        |> Duration
 
 
 within10secsBefore : Posix -> Posix -> Bool
