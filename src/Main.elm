@@ -5,7 +5,6 @@ import Browser.Events exposing (onAnimationFrame)
 import Dict exposing (Dict)
 import Gamepad
 import Html exposing (Html, div)
-import Html.Attributes
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Time exposing (Posix)
@@ -22,25 +21,21 @@ main =
 
 
 type alias Model =
-    { pressed : Bool
+    { input : ButtonAction
     , phase : Phase
     , time : Posix
-    , pushes : List Posix
-    , targets : List Posix
-    , result : List Duration
     , gamepads : Dict Int Gamepad.Gamepad
+    , step : Step
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( { pressed = False
+    ( { input = None
       , phase = 0.0
       , time = Time.millisToPosix 0
-      , targets = []
-      , pushes = []
       , gamepads = Dict.empty
-      , result = []
+      , step = Start
       }
     , Cmd.none
     )
@@ -48,14 +43,28 @@ init =
 
 type Msg
     = Frame Posix
-    | OnInput Gamepad.Input
+    | OnInput ButtonAction
     | OnConnectionChanged Gamepad.ConnectionChanged
+
+
+type Sample
+    = Sample Posix Posix
+
+
+type alias Samples =
+    List Sample
 
 
 type ButtonAction
     = None
-    | Up
-    | Down
+    | Up Posix Posix
+    | Down Posix
+
+
+type Step
+    = Start
+    | Measure Samples
+    | End Samples
 
 
 type alias Phase =
@@ -75,66 +84,66 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Frame now ->
-            let
-                millis =
-                    Time.posixToMillis now
+            case model.step of
+                Start ->
+                    ( model, Cmd.none )
 
-                mod =
-                    modBy phaseMs millis
+                End _ ->
+                    ( model, Cmd.none )
 
-                phase =
-                    toFloat mod / toFloat phaseMs
+                Measure samples ->
+                    if List.length samples > 12 then
+                        ( { model
+                            | step = End samples
+                          }
+                        , Cmd.none
+                        )
 
-                target =
-                    millis // phaseMs |> (*) 1000 |> Time.millisToPosix
+                    else
+                        let
+                            millis =
+                                Time.posixToMillis now
 
-                allTargets =
-                    case List.reverse model.targets of
-                        last :: _ ->
-                            if last /= target then
-                                List.append model.targets [ target ]
+                            mod =
+                                modBy phaseMs millis
 
-                            else
-                                model.targets
-
-                        [] ->
-                            [ target ]
-
-                targets =
-                    List.filter (\t -> within10secsBefore now t) allTargets
-
-                pushes =
-                    List.filter (\t -> within10secsBefore now t) model.pushes
-
-                pushResult =
-                    result pushes
-            in
-            ( { model
-                | phase = phase
-                , targets = targets
-                , time = now
-                , pushes = pushes
-                , result = pushResult
-              }
-            , Cmd.none
-            )
+                            phase =
+                                toFloat mod / toFloat phaseMs
+                        in
+                        ( { model
+                            | phase = phase
+                            , time = now
+                          }
+                        , Cmd.none
+                        )
 
         OnInput input ->
             let
-                pushes =
-                    case buttonAction model input of
-                        Down ->
-                            List.append model.pushes [ input.time ]
+                ( newModel, cmd ) =
+                    case model.step of
+                        Start ->
+                            ( { model | step = Measure [] }, Cmd.none )
+
+                        Measure samples ->
+                            case input of
+                                Up since until ->
+                                    let
+                                        sample =
+                                            Sample since until
+                                    in
+                                    ( { model
+                                        | step = sample :: samples |> Measure
+                                      }
+                                    , Cmd.none
+                                    )
+
+                                _ ->
+                                    ( model, Cmd.none )
 
                         _ ->
-                            model.pushes
+                            ( model, Cmd.none )
             in
-            ( { model
-                | pressed = input.pressed
-                , pushes = pushes
-              }
-            , Cmd.none
-            )
+            ( { newModel | input = input }, cmd )
 
         OnConnectionChanged connectionChanged ->
             case connectionChanged of
@@ -150,9 +159,9 @@ update msg model =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions _ =
+subscriptions model =
     Sub.batch
-        [ Gamepad.onInput OnInput
+        [ buttonAction model >> OnInput |> Gamepad.onInput
         , Gamepad.onConnectionChanged OnConnectionChanged
         , onAnimationFrame Frame
         ]
@@ -161,15 +170,24 @@ subscriptions _ =
 view : Model -> Html Msg
 view model =
     div []
-        [ div [ id "info" ]
-            [ Html.text ((model.pushes |> List.length |> String.fromInt) ++ " pushes")
-            ]
-        , div [ id "result" ]
-            [ model.result |> mean |> viewDuration ]
-        , viewGamepads model.gamepads
-        , viewCircle model.pressed model.phase
-        , viewGraph model.result
-        ]
+        (case model.step of
+            Start ->
+                [ viewGamepads model.gamepads
+                ]
+
+            Measure _ ->
+                [ viewCircle model.phase
+                ]
+
+            End samples ->
+                [ div [ id "info" ]
+                    [ Html.text ((samples |> List.length |> String.fromInt) ++ " pushes")
+                    ]
+                , div [ id "result" ]
+                    [ samples |> durations |> mean |> viewDuration ]
+                , viewGraph samples
+                ]
+        )
 
 
 viewDuration : Duration -> Html Msg
@@ -190,7 +208,7 @@ viewGamepads gamepads =
         ]
 
 
-viewGraph : List Duration -> Html Msg
+viewGraph : Samples -> Html Msg
 viewGraph ds =
     svg
         [ width "800"
@@ -219,12 +237,12 @@ viewGraph ds =
                         ]
                         []
                 )
-                ds
+                (durations ds)
         )
 
 
-viewCircle : Bool -> Phase -> Html Msg
-viewCircle pushed phase =
+viewCircle : Phase -> Html Msg
+viewCircle phase =
     svg
         [ width "400"
         , height "400"
@@ -250,13 +268,7 @@ viewCircle pushed phase =
                     [ cx "50"
                     , cy "50"
                     , r "50"
-                    , fill
-                        (if pushed then
-                            "#0f0"
-
-                         else
-                            "#0f0"
-                        )
+                    , fill "#0f0"
                     ]
                     []
                 , line
@@ -272,10 +284,10 @@ viewCircle pushed phase =
         ]
 
 
-result : List Posix -> List Duration
-result =
+durations : List Sample -> List Duration
+durations =
     List.map
-        (\t ->
+        (\(Sample t _) ->
             let
                 millis =
                     Time.posixToMillis t
@@ -302,21 +314,22 @@ mean ds =
         |> Duration
 
 
-within10secsBefore : Posix -> Posix -> Bool
-within10secsBefore t1 t2 =
-    10000 > (Time.posixToMillis t1 - Time.posixToMillis t2)
-
-
 buttonAction : Model -> Gamepad.Input -> ButtonAction
 buttonAction model input =
-    if model.pressed == input.pressed then
-        None
+    case model.input of
+        Down since ->
+            if input.pressed then
+                model.input
 
-    else if model.pressed && not input.pressed then
-        Up
+            else
+                Up since input.time
 
-    else
-        Down
+        _ ->
+            if input.pressed then
+                Down input.time
+
+            else
+                None
 
 
 angle : Phase -> Float
