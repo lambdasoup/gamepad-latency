@@ -22,8 +22,6 @@ main =
 
 type alias Model =
     { input : ButtonAction
-    , phase : Phase
-    , time : Posix
     , gamepads : Dict Int Gamepad.Gamepad
     , step : Step
     }
@@ -32,8 +30,6 @@ type alias Model =
 init : ( Model, Cmd Msg )
 init =
     ( { input = None
-      , phase = 0.0
-      , time = Time.millisToPosix 0
       , gamepads = Dict.empty
       , step = Start
       }
@@ -63,7 +59,10 @@ type ButtonAction
 
 type Step
     = Start
-    | Measure Samples
+    | Measure
+        { samples : Samples
+        , phase : Phase
+        }
     | End Samples
 
 
@@ -91,10 +90,10 @@ update msg model =
                 End _ ->
                     ( model, Cmd.none )
 
-                Measure samples ->
-                    if List.length samples > 12 then
+                Measure measure ->
+                    if List.length measure.samples > 12 then
                         ( { model
-                            | step = End samples
+                            | step = End measure.samples
                           }
                         , Cmd.none
                         )
@@ -111,8 +110,7 @@ update msg model =
                                 toFloat mod / toFloat phaseMs
                         in
                         ( { model
-                            | phase = phase
-                            , time = now
+                            | step = Measure { measure | phase = phase }
                           }
                         , Cmd.none
                         )
@@ -122,17 +120,21 @@ update msg model =
                 ( newModel, cmd ) =
                     case model.step of
                         Start ->
-                            ( { model | step = Measure [] }, Cmd.none )
+                            ( { model
+                                | step = Measure { samples = [], phase = 0.0 }
+                              }
+                            , Cmd.none
+                            )
 
-                        Measure samples ->
+                        Measure measure ->
                             case input of
                                 Up since until ->
                                     let
-                                        sample =
-                                            Sample since until
+                                        newSamples =
+                                            Sample since until :: measure.samples
                                     in
                                     ( { model
-                                        | step = sample :: samples |> Measure
+                                        | step = Measure { measure | samples = newSamples }
                                       }
                                     , Cmd.none
                                     )
@@ -175,8 +177,8 @@ view model =
                 [ viewGamepads model.gamepads
                 ]
 
-            Measure _ ->
-                [ viewCircle model.phase
+            Measure measure ->
+                [ viewCircle measure.phase
                 ]
 
             End samples ->
