@@ -31,7 +31,7 @@ init : ( Model, Cmd Msg )
 init =
     ( { input = None
       , gamepads = Dict.empty
-      , step = Start
+      , step = Start Idle
       }
     , Cmd.none
     )
@@ -58,7 +58,7 @@ type ButtonAction
 
 
 type Step
-    = Start
+    = Start Launcher
     | Measure
         { samples : Samples
         , phase : Phase
@@ -68,6 +68,14 @@ type Step
 
 type alias Phase =
     Float
+
+
+type Launcher
+    = Idle
+    | Launching
+        { timestamp : Posix
+        , progress : Float
+        }
 
 
 type Duration
@@ -84,8 +92,50 @@ update msg model =
     case msg of
         Frame now ->
             case model.step of
-                Start ->
-                    ( model, Cmd.none )
+                Start launcher ->
+                    case launcher of
+                        Idle ->
+                            case model.input of
+                                Down _ ->
+                                    ( { model
+                                        | step =
+                                            Launching
+                                                { timestamp = now
+                                                , progress = 0.0
+                                                }
+                                                |> Start
+                                      }
+                                    , Cmd.none
+                                    )
+
+                                _ ->
+                                    ( model, Cmd.none )
+
+                        Launching { timestamp, progress } ->
+                            let
+                                op =
+                                    case model.input of
+                                        Down _ ->
+                                            (+)
+
+                                        _ ->
+                                            (-)
+
+                                newProgress =
+                                    op progress (0.0005 * toFloat (Time.posixToMillis now - Time.posixToMillis timestamp))
+
+                                step =
+                                    if newProgress < 0.0 then
+                                        Start Idle
+
+                                    else if newProgress > 1.0 then
+                                        Measure
+                                            { samples = [], phase = 0.0 }
+
+                                    else
+                                        Launching { timestamp = now, progress = newProgress } |> Start
+                            in
+                            ( { model | step = step }, Cmd.none )
 
                 End _ ->
                     ( model, Cmd.none )
@@ -119,12 +169,8 @@ update msg model =
             let
                 ( newModel, cmd ) =
                     case model.step of
-                        Start ->
-                            ( { model
-                                | step = Measure { samples = [], phase = 0.0 }
-                              }
-                            , Cmd.none
-                            )
+                        Start _ ->
+                            ( model, Cmd.none )
 
                         Measure measure ->
                             case input of
@@ -173,8 +219,9 @@ view : Model -> Html Msg
 view model =
     div []
         (case model.step of
-            Start ->
+            Start launcher ->
                 [ viewGamepads model.gamepads
+                , viewLaunch launcher
                 ]
 
             Measure measure ->
@@ -190,6 +237,34 @@ view model =
                 , viewGraph samples
                 ]
         )
+
+
+viewLaunch : Launcher -> Html Msg
+viewLaunch launcher =
+    let
+        progress =
+            case launcher of
+                Launching launching ->
+                    launching.progress
+
+                _ ->
+                    0.0
+    in
+    svg
+        [ width "400"
+        , height "400"
+        , viewBox "0 0 100 150"
+        , Svg.Attributes.id "launcher"
+        ]
+        [ Svg.rect
+            [ x "0"
+            , y "0"
+            , width (String.fromInt (round (100.0 * progress)))
+            , height "100"
+            , fill "#f00"
+            ]
+            []
+        ]
 
 
 viewDuration : Duration -> Html Msg
