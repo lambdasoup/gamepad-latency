@@ -122,7 +122,7 @@ update msg model =
                                             (-)
 
                                 newProgress =
-                                    op progress (0.0005 * toFloat (Time.posixToMillis now - Time.posixToMillis timestamp))
+                                    op progress (0.001 * toFloat (Time.posixToMillis now - Time.posixToMillis timestamp))
 
                                 step =
                                     if newProgress < 0.0 then
@@ -225,8 +225,7 @@ view model =
                 ]
 
             Measure measure ->
-                [ viewCircle measure.phase
-                ]
+                [ viewMeasure measure ]
 
             End samples ->
                 [ div [ id "info" ]
@@ -241,26 +240,27 @@ view model =
 
 viewLaunch : Launcher -> Html Msg
 viewLaunch launcher =
-    case launcher of
-        Launching launching ->
-            svg
-                [ width "400"
-                , height "400"
-                , viewBox "0 0 100 150"
-                , Svg.Attributes.id "launcher"
-                ]
-                [ Svg.rect
-                    [ x "0"
-                    , y "0"
-                    , width (String.fromInt (round (100.0 * launching.progress)))
-                    , height "100"
-                    , fill "#f00"
+    div [ id "launcher" ]
+        [ case launcher of
+            Launching launching ->
+                svg
+                    [ width "400"
+                    , height "400"
+                    , viewBox "0 0 100 150"
                     ]
-                    []
-                ]
+                    [ Svg.rect
+                        [ x "0"
+                        , y "0"
+                        , width (String.fromInt (round (100.0 * launching.progress)))
+                        , height "100"
+                        , fill "#f00"
+                        ]
+                        []
+                    ]
 
-        _ ->
-            Html.text "Hold button to start!"
+            _ ->
+                Html.text "Hold button to start!"
+        ]
 
 
 viewDuration : Duration -> Html Msg
@@ -288,7 +288,6 @@ viewGraph ds =
         , height "400"
         , viewBox "0 0 1000 500"
         , Svg.Attributes.id "action"
-        , Svg.Attributes.style "margin: auto"
         ]
         (Svg.line
             [ x1 "500"
@@ -318,42 +317,50 @@ viewGraph ds =
         )
 
 
-viewCircle : Phase -> Html Msg
-viewCircle phase =
+viewMeasure : { phase : Phase, samples : Samples } -> Html Msg
+viewMeasure measure =
     svg
-        [ width "400"
-        , height "400"
-        , viewBox "0 0 100 150"
-        , Svg.Attributes.id "graph"
+        [ width "800"
+        , height "600"
+        , viewBox "0 0 800 600"
+        , Svg.Attributes.id "measure"
         ]
         [ g []
             [ g
                 []
-                [ line
-                    [ x1 "50"
-                    , y1 "25"
-                    , x2 "50"
-                    , y2 "50"
-                    , stroke "#000"
+                [ circle
+                    [ cx "400"
+                    , cy "300"
+                    , r "200"
+                    , stroke "#86c232"
+                    , fillOpacity "0"
+                    , strokeWidth "2px"
                     ]
                     []
                 ]
             , g
-                [ transform ("translate(0, 50) rotate(" ++ String.fromFloat (angle phase) ++ ", 50, 50)")
+                [ transform ("translate(" ++ String.fromFloat (measure.phase * 800.0) ++ ", 0)")
                 ]
                 [ circle
-                    [ cx "50"
-                    , cy "50"
-                    , r "50"
-                    , fill "#0f0"
+                    [ cx "400"
+                    , cy "300"
+                    , r "200"
+                    , stroke "#86c232"
+                    , fillOpacity "0"
+                    , strokeWidth "2px"
                     ]
                     []
-                , line
-                    [ x1 "50"
-                    , y1 "50"
-                    , x2 "50"
-                    , y2 "0"
-                    , stroke "#000"
+                ]
+            , g
+                [ transform ("translate(" ++ String.fromFloat ((measure.phase - 1.0) * 800.0) ++ ", 0)")
+                ]
+                [ circle
+                    [ cx "400"
+                    , cy "300"
+                    , r "200"
+                    , stroke "#86c232"
+                    , fillOpacity "0"
+                    , strokeWidth "2px"
                     ]
                     []
                 ]
@@ -410,8 +417,3 @@ buttonAction model input =
 
             else
                 None
-
-
-angle : Phase -> Float
-angle p =
-    360.0 * p

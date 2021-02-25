@@ -3,8 +3,8 @@
     <head>
         <script src="elm.js"></script>
         <title>Gamepad Latency</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="Description" content="Test your gamepad latency.">
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="Description" content="Test your gamepad latency." />
         <style>
             /*
                color scheme
@@ -49,19 +49,36 @@
                 margin: 20px auto 20px auto;
             }
 
-            #action {
-                display: block;
+            #measure {
             }
 
             #graph {
-                display: block;
+                flex-grow: 1;
+            }
+
+            #gamepads {
+                font-size: x-large;
+                padding: 16px;
+                border-bottom: solid 1px #474b4f;
+            }
+
+            #launcher {
+                flex-grow: 1;
+                font-size: xx-large;
+                align-items: center;
+                justify-content: center;
+                display: flex;
             }
 
             #elmapp {
-                background-color: #666;
                 margin: 64px auto;
                 max-width: 800px;
                 height: 600px;
+                border: solid 2px #6b6e70;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-evenly;
+                align-items: center;
             }
 
             #footer {
@@ -112,11 +129,11 @@
             });
         </script>
         <section id="footer">
-            © 2021 lambdasoup.com |
-            Licensed under AGPL3 |
-            <a href="http://github.com/lambdasoup/gamepad-latency">view source</a> |
-            Privacy Policy |
-            Imprint
+            © 2021 lambdasoup.com | Licensed under AGPL3 |
+            <a href="http://github.com/lambdasoup/gamepad-latency"
+                >view source</a
+            >
+            | Privacy Policy | Imprint
         </section>
     </body>
 </html>
