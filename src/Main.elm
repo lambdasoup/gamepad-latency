@@ -217,7 +217,7 @@ subscriptions model =
 
 view : Model -> Html Msg
 view model =
-    div []
+    div [ id "elmapp" ]
         (case model.step of
             Start launcher ->
                 [ viewGamepads model.gamepads
@@ -241,30 +241,26 @@ view model =
 
 viewLaunch : Launcher -> Html Msg
 viewLaunch launcher =
-    let
-        progress =
-            case launcher of
-                Launching launching ->
-                    launching.progress
+    case launcher of
+        Launching launching ->
+            svg
+                [ width "400"
+                , height "400"
+                , viewBox "0 0 100 150"
+                , Svg.Attributes.id "launcher"
+                ]
+                [ Svg.rect
+                    [ x "0"
+                    , y "0"
+                    , width (String.fromInt (round (100.0 * launching.progress)))
+                    , height "100"
+                    , fill "#f00"
+                    ]
+                    []
+                ]
 
-                _ ->
-                    0.0
-    in
-    svg
-        [ width "400"
-        , height "400"
-        , viewBox "0 0 100 150"
-        , Svg.Attributes.id "launcher"
-        ]
-        [ Svg.rect
-            [ x "0"
-            , y "0"
-            , width (String.fromInt (round (100.0 * progress)))
-            , height "100"
-            , fill "#f00"
-            ]
-            []
-        ]
+        _ ->
+            Html.text "Hold button to start!"
 
 
 viewDuration : Duration -> Html Msg
