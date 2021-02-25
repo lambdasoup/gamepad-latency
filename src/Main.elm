@@ -141,7 +141,7 @@ update msg model =
                     ( model, Cmd.none )
 
                 Measure measure ->
-                    if List.length measure.samples > 12 then
+                    if List.length measure.samples >= 12 then
                         ( { model
                             | step = End measure.samples
                           }
@@ -299,13 +299,17 @@ viewGraph ds =
             , strokeWidth "1"
             ]
             []
-            :: List.map
-                (\(Duration t) ->
+            :: List.indexedMap
+                (\i ( Duration t1, Duration t2 ) ->
+                    let
+                        y =
+                            500 // List.length ds * i
+                    in
                     Svg.rect
-                        [ x (String.fromInt (t + 500))
-                        , y "250"
-                        , width "10"
+                        [ x (String.fromInt (t1 + 500))
+                        , Svg.Attributes.y (String.fromInt y)
                         , height "10"
+                        , width (String.fromInt (t2 - t1))
                         , fill "#f00"
                         ]
                         []
@@ -357,31 +361,34 @@ viewCircle phase =
         ]
 
 
-durations : List Sample -> List Duration
+durations : List Sample -> List ( Duration, Duration )
 durations =
-    List.map
-        (\(Sample t _) ->
-            let
-                millis =
-                    Time.posixToMillis t
+    let
+        duration : Posix -> Duration
+        duration =
+            \t ->
+                let
+                    millis =
+                        Time.posixToMillis t
 
-                mod =
-                    modBy 1000 millis
+                    mod =
+                        modBy 1000 millis
 
-                dist =
-                    if mod < 500 then
-                        mod
+                    dist =
+                        if mod < 500 then
+                            mod
 
-                    else
-                        mod - 1000
-            in
-            Duration dist
-        )
+                        else
+                            mod - 1000
+                in
+                Duration dist
+    in
+    List.map (\(Sample t1 t2) -> ( duration t1, duration t2 ))
 
 
-mean : List Duration -> Duration
+mean : List ( Duration, Duration ) -> Duration
 mean ds =
-    List.map (\(Duration xs) -> abs xs) ds
+    List.map (\( Duration t1, Duration _ ) -> abs t1) ds
         |> List.sum
         |> (\sum -> sum // List.length ds)
         |> Duration
