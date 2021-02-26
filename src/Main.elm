@@ -5,6 +5,7 @@ import Browser.Events exposing (onAnimationFrame)
 import Dict exposing (Dict)
 import Gamepad
 import Html exposing (Html, div)
+import Html.Attributes
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Time exposing (Posix)
@@ -76,15 +77,54 @@ type Launcher
         { timestamp : Posix
         , progress : Float
         }
+    | AnimateOut Transition
+
+
+type Transition
+    = InTransition { start : Posix, length : Duration, progress : Float }
+    | EndTransition
+
+
+startTransition : Posix -> Transition
+startTransition start =
+    InTransition
+        { start = start
+        , length = Duration 200
+        , progress = 0.0
+        }
+
+
+advanceTransition : Transition -> Posix -> Transition
+advanceTransition tr now =
+    case tr of
+        EndTransition ->
+            EndTransition
+
+        InTransition it ->
+            let
+                start =
+                    Time.posixToMillis it.start
+
+                nowMs =
+                    Time.posixToMillis now
+
+                progress =
+                    toFloat (nowMs - start) / toFloat (durationToMillis it.length)
+            in
+            if progress >= 1.0 then
+                EndTransition
+
+            else
+                InTransition { it | progress = progress }
 
 
 type Duration
     = Duration Int
 
 
-phaseMs : Int
-phaseMs =
-    1000
+durationToMillis : Duration -> Int
+durationToMillis (Duration ms) =
+    ms
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -129,11 +169,22 @@ update msg model =
                                         Start Idle
 
                                     else if newProgress > 1.0 then
-                                        Measure
-                                            { samples = [], phase = 0.0 }
+                                        startTransition now |> AnimateOut |> Start
 
                                     else
                                         Launching { timestamp = now, progress = newProgress } |> Start
+                            in
+                            ( { model | step = step }, Cmd.none )
+
+                        AnimateOut transition ->
+                            let
+                                step =
+                                    case advanceTransition transition now of
+                                        EndTransition ->
+                                            { samples = [], phase = 0.0 } |> Measure
+
+                                        InTransition it ->
+                                            InTransition it |> AnimateOut |> Start
                             in
                             ( { model | step = step }, Cmd.none )
 
@@ -154,10 +205,10 @@ update msg model =
                                 Time.posixToMillis now
 
                             mod =
-                                modBy phaseMs millis
+                                modBy 1000 millis
 
                             phase =
-                                toFloat mod / toFloat phaseMs
+                                toFloat mod / toFloat 1000
                         in
                         ( { model
                             | step = Measure { measure | phase = phase }
@@ -240,9 +291,22 @@ view model =
 
 viewLaunch : Launcher -> Html Msg
 viewLaunch launcher =
-    div [ id "launcher" ]
-        [ case launcher of
-            Launching launching ->
+    let
+        opacity =
+            case launcher of
+                AnimateOut tr ->
+                    case tr of
+                        InTransition it ->
+                            1.0 - it.progress
+
+                        EndTransition ->
+                            0.0
+
+                _ ->
+                    1.0
+
+        draw =
+            \progress ->
                 svg
                     [ width "400"
                     , height "400"
@@ -251,12 +315,20 @@ viewLaunch launcher =
                     [ Svg.rect
                         [ x "0"
                         , y "0"
-                        , width (String.fromInt (round (100.0 * launching.progress)))
+                        , width (String.fromInt (round (100.0 * progress)))
                         , height "100"
                         , fill "#f00"
                         ]
                         []
                     ]
+    in
+    div [ id "launcher", Html.Attributes.style "opacity" (String.fromFloat opacity) ]
+        [ case launcher of
+            Launching launching ->
+                draw launching.progress
+
+            AnimateOut _ ->
+                draw 1.0
 
             _ ->
                 Html.text "Hold button to start!"
@@ -344,7 +416,7 @@ viewMeasure measure =
                 [ circle
                     [ cx "400"
                     , cy "300"
-                    , r "200"
+                    , r "100"
                     , stroke "#86c232"
                     , fillOpacity "0"
                     , strokeWidth "2px"
@@ -357,7 +429,7 @@ viewMeasure measure =
                 [ circle
                     [ cx "400"
                     , cy "300"
-                    , r "200"
+                    , r "100"
                     , stroke "#86c232"
                     , fillOpacity "0"
                     , strokeWidth "2px"
