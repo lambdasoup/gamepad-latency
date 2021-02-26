@@ -308,18 +308,27 @@ viewLaunch launcher =
         draw =
             \progress ->
                 svg
-                    [ width "400"
-                    , height "400"
-                    , viewBox "0 0 100 150"
+                    [ width "600"
+                    , height "200"
+                    , viewBox "0 0 600 200"
+                    , Svg.Attributes.style "font-size: 48px; border: solid 1px #6b6e70;"
                     ]
                     [ Svg.rect
                         [ x "0"
                         , y "0"
-                        , width (String.fromInt (round (100.0 * progress)))
-                        , height "100"
-                        , fill "#f00"
+                        , width (String.fromInt (round (600.0 * progress)))
+                        , height "200"
+                        , fill "#61892f"
                         ]
                         []
+                    , Svg.text_
+                        [ fill "white"
+                        , x "300"
+                        , y "100"
+                        , Svg.Attributes.textAnchor "middle"
+                        , Svg.Attributes.dominantBaseline "middle"
+                        ]
+                        [ Svg.text "Hold button to start!" ]
                     ]
     in
     div [ id "launcher", Html.Attributes.style "opacity" (String.fromFloat opacity) ]
@@ -331,7 +340,7 @@ viewLaunch launcher =
                 draw 1.0
 
             _ ->
-                Html.text "Hold button to start!"
+                draw 0.0
         ]
 
 
