@@ -44,12 +44,8 @@ type Msg
     | OnConnectionChanged Gamepad.ConnectionChanged
 
 
-type Sample
-    = Sample Posix Posix
-
-
-type alias Samples =
-    List Sample
+type alias Sample =
+    { down : Posix, up : Posix }
 
 
 type ButtonAction
@@ -60,15 +56,26 @@ type ButtonAction
 
 type Step
     = Start Launcher
-    | Measure
-        { samples : Samples
-        , phase : Phase
+    | Run Sampling
+    | End Result
+
+
+type alias Result =
+    List Target
+
+
+type Sampling
+    = Measure
+        { targets : List Target
+        , time : Posix
         }
-    | End Samples
+    | AnimateIn Transition
 
 
-type alias Phase =
-    Float
+type alias Target =
+    { time : Posix
+    , hits : List Sample
+    }
 
 
 type Launcher
@@ -127,6 +134,24 @@ durationToMillis (Duration ms) =
     ms
 
 
+run : Posix -> Step
+run now =
+    startTransition now |> AnimateIn |> Run
+
+
+makeTargets : Posix -> Int -> List Target -> List Target
+makeTargets time n targets =
+    case n of
+        0 ->
+            targets
+
+        _ ->
+            makeTargets
+                (addDuration time (Duration 2000))
+                (n - 1)
+                ({ time = time, hits = [] } :: targets)
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -181,7 +206,7 @@ update msg model =
                                 step =
                                     case advanceTransition transition now of
                                         EndTransition ->
-                                            { samples = [], phase = 0.0 } |> Measure
+                                            run now
 
                                         InTransition it ->
                                             InTransition it |> AnimateOut |> Start
@@ -191,53 +216,63 @@ update msg model =
                 End _ ->
                     ( model, Cmd.none )
 
-                Measure measure ->
-                    if List.length measure.samples >= 12 then
-                        ( { model
-                            | step = End measure.samples
-                          }
-                        , Cmd.none
-                        )
+                Run sampling ->
+                    case sampling of
+                        AnimateIn transition ->
+                            let
+                                step =
+                                    case advanceTransition transition now of
+                                        EndTransition ->
+                                            { targets =
+                                                makeTargets
+                                                    (addDuration now (Duration 3000))
+                                                    12
+                                                    []
+                                            , time = now
+                                            }
+                                                |> Measure
+                                                |> Run
 
-                    else
-                        let
-                            millis =
-                                Time.posixToMillis now
+                                        InTransition it ->
+                                            InTransition it |> AnimateIn |> Run
+                            in
+                            ( { model | step = step }, Cmd.none )
 
-                            mod =
-                                modBy 1000 millis
+                        Measure measure ->
+                            if targetsDone measure.targets measure.time then
+                                ( { model | step = End measure.targets }, Cmd.none )
 
-                            phase =
-                                toFloat mod / toFloat 1000
-                        in
-                        ( { model
-                            | step = Measure { measure | phase = phase }
-                          }
-                        , Cmd.none
-                        )
+                            else
+                                ( { model
+                                    | step =
+                                        Measure { measure | time = now }
+                                            |> Run
+                                  }
+                                , Cmd.none
+                                )
 
         OnInput input ->
             let
                 ( newModel, cmd ) =
                     case model.step of
-                        Start _ ->
-                            ( model, Cmd.none )
-
-                        Measure measure ->
-                            case input of
-                                Up since until ->
-                                    let
-                                        newSamples =
-                                            Sample since until :: measure.samples
-                                    in
-                                    ( { model
-                                        | step = Measure { measure | samples = newSamples }
-                                      }
-                                    , Cmd.none
-                                    )
-
-                                _ ->
+                        Run sampling ->
+                            case sampling of
+                                AnimateIn _ ->
                                     ( model, Cmd.none )
+
+                                Measure measure ->
+                                    case input of
+                                        Up since until ->
+                                            ( { model
+                                                | step =
+                                                    Measure { measure | targets = applyHit measure.targets (Sample since until) }
+                                                        |> Run
+                                              }
+                                            , Cmd.none
+                                            )
+
+                                        _ ->
+                                            ( model, Cmd.none )
 
                         _ ->
                             ( model, Cmd.none )
@@ -255,6 +290,34 @@ update msg model =
                     ( { model | gamepads = Dict.remove gamepad.index model.gamepads }
                     , Cmd.none
                     )
+
+
+addDuration : Posix -> Duration -> Posix
+addDuration p (Duration ms) =
+    Time.posixToMillis p + ms |> Time.millisToPosix
+
+
+targetsDone : List Target -> Posix -> Bool
+targetsDone targets time =
+    let
+        last =
+            List.foldr
+                (\target max ->
+                    if before max target.time then
+                        target.time
+
+                    else
+                        max
+                )
+                (Time.millisToPosix 0)
+                targets
+    in
+    before (addDuration last (Duration 3000)) time
+
+
+before : Posix -> Posix -> Bool
+before t1 t2 =
+    Time.posixToMillis t1 < Time.posixToMillis t2
 
 
 subscriptions : Model -> Sub Msg
@@ -275,16 +338,16 @@ view model =
                 , viewLaunch launcher
                 ]
 
-            Measure measure ->
-                [ viewMeasure measure ]
+            Run sampling ->
+                [ viewSampling sampling ]
 
-            End samples ->
+            End result ->
                 [ div [ id "info" ]
-                    [ Html.text ((samples |> List.length |> String.fromInt) ++ " pushes")
+                    [ Html.text ((result |> List.length |> String.fromInt) ++ " pushes")
                     ]
                 , div [ id "result" ]
-                    [ samples |> durations |> mean |> viewDuration ]
-                , viewGraph samples
+                    [ result |> durations |> mean |> viewDuration ]
+                , viewGraph result
                 ]
         )
 
@@ -362,7 +425,7 @@ viewGamepads gamepads =
         ]
 
 
-viewGraph : Samples -> Html Msg
+viewGraph : List Target -> Html Msg
 viewGraph ds =
     svg
         [ width "800"
@@ -398,59 +461,91 @@ viewGraph ds =
         )
 
 
-viewMeasure : { phase : Phase, samples : Samples } -> Html Msg
-viewMeasure measure =
-    svg
-        [ width "800"
-        , height "600"
-        , viewBox "0 0 800 600"
-        , Svg.Attributes.id "measure"
-        ]
-        [ g []
-            [ g
-                []
-                [ circle
-                    [ cx "400"
-                    , cy "300"
-                    , r "200"
-                    , stroke "#86c232"
-                    , fillOpacity "0"
-                    , strokeWidth "2px"
+viewSampling : Sampling -> Html Msg
+viewSampling sampling =
+    let
+        opacity =
+            case sampling of
+                AnimateIn tr ->
+                    case tr of
+                        InTransition it ->
+                            it.progress
+
+                        EndTransition ->
+                            1.0
+
+                _ ->
+                    1.0
+    in
+    case sampling of
+        Measure measure ->
+            div [ id "measure", Html.Attributes.style "opacity" (String.fromFloat opacity) ]
+                [ svg
+                    [ width "800"
+                    , height "600"
+                    , viewBox "0 0 800 600"
                     ]
-                    []
-                ]
-            , g
-                [ transform ("translate(" ++ String.fromFloat (measure.phase * 800.0) ++ ", 0)")
-                ]
-                [ circle
-                    [ cx "400"
-                    , cy "300"
-                    , r "100"
-                    , stroke "#86c232"
-                    , fillOpacity "0"
-                    , strokeWidth "2px"
+                    [ g []
+                        (g
+                            []
+                            [ circle
+                                [ cx "400"
+                                , cy "300"
+                                , r "200"
+                                , stroke "#86c232"
+                                , fillOpacity "0"
+                                , strokeWidth "2px"
+                                ]
+                                []
+                            ]
+                            :: List.map
+                                (\target ->
+                                    let
+                                        phase =
+                                            toFloat (Time.posixToMillis measure.time - Time.posixToMillis target.time) / 2000.0
+                                    in
+                                    g
+                                        [ transform ("translate(" ++ String.fromFloat (phase * 800.0) ++ ", 0)")
+                                        ]
+                                        [ circle
+                                            [ cx "400"
+                                            , cy "300"
+                                            , r "100"
+                                            , stroke "#86c232"
+                                            , fillOpacity "0"
+                                            , strokeWidth "2px"
+                                            ]
+                                            []
+                                        ]
+                                )
+                                measure.targets
+                        )
                     ]
-                    []
                 ]
-            , g
-                [ transform ("translate(" ++ String.fromFloat ((measure.phase - 1.0) * 800.0) ++ ", 0)")
-                ]
-                [ circle
-                    [ cx "400"
-                    , cy "300"
-                    , r "100"
-                    , stroke "#86c232"
-                    , fillOpacity "0"
-                    , strokeWidth "2px"
-                    ]
-                    []
-                ]
-            ]
-        ]
+
+        _ ->
+            div [] []
 
 
-durations : List Sample -> List ( Duration, Duration )
-durations =
+applyHit : List Target -> Sample -> List Target
+applyHit targets sample =
+    List.map
+        (\target ->
+            let
+                diff =
+                    Time.posixToMillis target.time - Time.posixToMillis sample.down
+            in
+            if abs diff < 500 then
+                { target | hits = sample :: target.hits }
+
+            else
+                target
+        )
+        targets
+
+
+durations : List Target -> List ( Duration, Duration )
+durations targets =
     let
         duration : Posix -> Duration
         duration =
@@ -471,7 +566,13 @@ durations =
                 in
                 Duration dist
     in
-    List.map (\(Sample t1 t2) -> ( duration t1, duration t2 ))
+    List.concat
+        (List.map
+            (\target ->
+                List.map (\hit -> ( duration hit.down, duration hit.up )) target.hits
+            )
+            targets
+        )
 
 
 mean : List ( Duration, Duration ) -> Duration
