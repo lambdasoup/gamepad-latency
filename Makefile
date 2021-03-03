@@ -20,7 +20,7 @@ watch:
 	while true; do \
 		clear ;\
 		make debug --no-print-directory; \
-		inotifywait $(src); \
+		inotifywait -rqe create,delete,modify,move $(src); \
 	done
 
 serve:
