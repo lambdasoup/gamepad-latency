@@ -32,7 +32,7 @@ init : ( Model, Cmd Msg )
 init =
     ( { input = None
       , gamepads = Dict.empty
-      , step = Start Idle
+      , step = Idle
       }
     , Cmd.none
     )
@@ -55,36 +55,27 @@ type ButtonAction
 
 
 type Step
-    = Start Launcher
-    | Run Sampling
-    | End Result
-
-
-type alias Result =
-    List Target
-
-
-type Sampling
-    = Measure
-        { targets : List Target
-        , time : Posix
+    = Idle
+    | Launching
+        { timestamp : Posix
+        , progress : Float
         }
-    | AnimateIn Transition
+    | FromLaunching Transition
+    | ToMeasure Transition
+    | Measure Measurement
+    | Result (List Target)
+
+
+type alias Measurement =
+    { targets : List Target
+    , time : Posix
+    }
 
 
 type alias Target =
     { time : Posix
     , hits : List Sample
     }
-
-
-type Launcher
-    = Idle
-    | Launching
-        { timestamp : Posix
-        , progress : Float
-        }
-    | AnimateOut Transition
 
 
 type Transition
@@ -136,7 +127,7 @@ durationToMillis (Duration ms) =
 
 run : Posix -> Step
 run now =
-    startTransition now |> AnimateIn |> Run
+    startTransition now |> ToMeasure
 
 
 makeTargets : Posix -> Int -> List Target -> List Target
@@ -157,122 +148,118 @@ update msg model =
     case msg of
         Frame now ->
             case model.step of
-                Start launcher ->
-                    case launcher of
-                        Idle ->
+                Idle ->
+                    case model.input of
+                        Down _ ->
+                            ( { model
+                                | step =
+                                    Launching
+                                        { timestamp = now
+                                        , progress = 0.0
+                                        }
+                              }
+                            , Cmd.none
+                            )
+
+                        _ ->
+                            ( model, Cmd.none )
+
+                Launching { timestamp, progress } ->
+                    let
+                        op =
                             case model.input of
                                 Down _ ->
+                                    (+)
+
+                                _ ->
+                                    (-)
+
+                        newProgress =
+                            op progress (0.001 * toFloat (Time.posixToMillis now - Time.posixToMillis timestamp))
+
+                        step =
+                            if newProgress < 0.0 then
+                                Idle
+
+                            else if newProgress > 1.0 then
+                                startTransition now |> FromLaunching
+
+                            else
+                                Launching { timestamp = now, progress = newProgress }
+                    in
+                    ( { model | step = step }, Cmd.none )
+
+                FromLaunching transition ->
+                    let
+                        step =
+                            case advanceTransition transition now of
+                                EndTransition ->
+                                    run now
+
+                                InTransition it ->
+                                    InTransition it |> FromLaunching
+                    in
+                    ( { model | step = step }, Cmd.none )
+
+                Result _ ->
+                    ( model, Cmd.none )
+
+                ToMeasure transition ->
+                    let
+                        step =
+                            case advanceTransition transition now of
+                                EndTransition ->
+                                    { targets =
+                                        makeTargets
+                                            (addDuration now (Duration 3000))
+                                            12
+                                            []
+                                    , time = now
+                                    }
+                                        |> Measure
+
+                                InTransition it ->
+                                    InTransition it |> ToMeasure
+                    in
+                    ( { model | step = step }, Cmd.none )
+
+                Measure measure ->
+                    if targetsDone measure.targets measure.time then
+                        ( { model | step = Result measure.targets }, Cmd.none )
+
+                    else
+                        ( { model
+                            | step =
+                                Measure { measure | time = now }
+                          }
+                        , Cmd.none
+                        )
+
+        OnInput input ->
+            let
+                ( newModel, cmd ) =
+                    case model.step of
+                        ToMeasure _ ->
+                            ( model, Cmd.none )
+
+                        Measure measure ->
+                            case input of
+                                Up since until ->
                                     ( { model
                                         | step =
-                                            Launching
-                                                { timestamp = now
-                                                , progress = 0.0
+                                            Measure
+                                                { measure
+                                                    | targets =
+                                                        applyHit
+                                                            measure.targets
+                                                            (Sample since until)
                                                 }
-                                                |> Start
                                       }
                                     , Cmd.none
                                     )
 
                                 _ ->
                                     ( model, Cmd.none )
-
-                        Launching { timestamp, progress } ->
-                            let
-                                op =
-                                    case model.input of
-                                        Down _ ->
-                                            (+)
-
-                                        _ ->
-                                            (-)
-
-                                newProgress =
-                                    op progress (0.001 * toFloat (Time.posixToMillis now - Time.posixToMillis timestamp))
-
-                                step =
-                                    if newProgress < 0.0 then
-                                        Start Idle
-
-                                    else if newProgress > 1.0 then
-                                        startTransition now |> AnimateOut |> Start
-
-                                    else
-                                        Launching { timestamp = now, progress = newProgress } |> Start
-                            in
-                            ( { model | step = step }, Cmd.none )
-
-                        AnimateOut transition ->
-                            let
-                                step =
-                                    case advanceTransition transition now of
-                                        EndTransition ->
-                                            run now
-
-                                        InTransition it ->
-                                            InTransition it |> AnimateOut |> Start
-                            in
-                            ( { model | step = step }, Cmd.none )
-
-                End _ ->
-                    ( model, Cmd.none )
-
-                Run sampling ->
-                    case sampling of
-                        AnimateIn transition ->
-                            let
-                                step =
-                                    case advanceTransition transition now of
-                                        EndTransition ->
-                                            { targets =
-                                                makeTargets
-                                                    (addDuration now (Duration 3000))
-                                                    12
-                                                    []
-                                            , time = now
-                                            }
-                                                |> Measure
-                                                |> Run
-
-                                        InTransition it ->
-                                            InTransition it |> AnimateIn |> Run
-                            in
-                            ( { model | step = step }, Cmd.none )
-
-                        Measure measure ->
-                            if targetsDone measure.targets measure.time then
-                                ( { model | step = End measure.targets }, Cmd.none )
-
-                            else
-                                ( { model
-                                    | step =
-                                        Measure { measure | time = now }
-                                            |> Run
-                                  }
-                                , Cmd.none
-                                )
-
-        OnInput input ->
-            let
-                ( newModel, cmd ) =
-                    case model.step of
-                        Run sampling ->
-                            case sampling of
-                                AnimateIn _ ->
-                                    ( model, Cmd.none )
-
-                                Measure measure ->
-                                    case input of
-                                        Up since until ->
-                                            ( { model
-                                                | step =
-                                                    Measure { measure | targets = applyHit measure.targets (Sample since until) }
-                                                        |> Run
-                                              }
-                                            , Cmd.none
-                                            )
-
-                                        _ ->
-                                            ( model, Cmd.none )
 
                         _ ->
                             ( model, Cmd.none )
@@ -333,77 +320,81 @@ view : Model -> Html Msg
 view model =
     div [ id "elmapp" ]
         (case model.step of
-            Start launcher ->
+            Idle ->
                 [ viewGamepads model.gamepads
-                , viewLaunch launcher
+                , viewLaunch 1.0 0.0
                 ]
 
-            Run sampling ->
-                [ viewSampling sampling ]
+            Launching launching ->
+                [ viewGamepads model.gamepads
+                , viewLaunch 1.0 launching.progress
+                ]
 
-            End result ->
+            FromLaunching transition ->
+                let
+                    opacity =
+                        case transition of
+                            InTransition it ->
+                                1.0 - it.progress
+
+                            EndTransition ->
+                                0.0
+                in
+                [ viewLaunch opacity 0.0 ]
+
+            ToMeasure transition ->
+                [ let
+                    opacity =
+                        case transition of
+                            InTransition it ->
+                                it.progress
+
+                            EndTransition ->
+                                1.0
+                  in
+                  viewMeasurement opacity Nothing
+                ]
+
+            Measure measurement ->
+                [ viewMeasurement 1.0 (Just measurement) ]
+
+            Result targets ->
                 [ div [ id "info" ]
-                    [ Html.text ((result |> List.length |> String.fromInt) ++ " pushes")
+                    [ Html.text ((targets |> List.length |> String.fromInt) ++ " pushes")
                     ]
                 , div [ id "result" ]
-                    [ result |> durations |> mean |> viewDuration ]
-                , viewGraph result
+                    [ targets |> durations |> mean |> viewDuration ]
+                , viewGraph targets
                 ]
         )
 
 
-viewLaunch : Launcher -> Html Msg
-viewLaunch launcher =
-    let
-        opacity =
-            case launcher of
-                AnimateOut tr ->
-                    case tr of
-                        InTransition it ->
-                            1.0 - it.progress
-
-                        EndTransition ->
-                            0.0
-
-                _ ->
-                    1.0
-
-        draw =
-            \progress ->
-                svg
-                    [ width "600"
-                    , height "200"
-                    , viewBox "0 0 600 200"
-                    , Svg.Attributes.style "font-size: 48px; border: solid 1px #6b6e70;"
-                    ]
-                    [ Svg.rect
-                        [ x "0"
-                        , y "0"
-                        , width (String.fromInt (round (600.0 * progress)))
-                        , height "200"
-                        , fill "#61892f"
-                        ]
-                        []
-                    , Svg.text_
-                        [ fill "white"
-                        , x "300"
-                        , y "100"
-                        , Svg.Attributes.textAnchor "middle"
-                        , Svg.Attributes.dominantBaseline "middle"
-                        ]
-                        [ Svg.text "Hold button to start!" ]
-                    ]
-    in
+viewLaunch : Float -> Float -> Html Msg
+viewLaunch opacity progress =
     div [ id "launcher", Html.Attributes.style "opacity" (String.fromFloat opacity) ]
-        [ case launcher of
-            Launching launching ->
-                draw launching.progress
-
-            AnimateOut _ ->
-                draw 1.0
-
-            _ ->
-                draw 0.0
+        [ svg
+            [ width "600"
+            , height "200"
+            , viewBox "0 0 600 200"
+            , Svg.Attributes.style "font-size: 48px; border: solid 1px #6b6e70;"
+            ]
+            [ Svg.rect
+                [ x "0"
+                , y "0"
+                , width (String.fromInt (round (600.0 * progress)))
+                , height "200"
+                , fill "#61892f"
+                ]
+                []
+            , Svg.text_
+                [ fill "white"
+                , x "300"
+                , y "100"
+                , Svg.Attributes.textAnchor "middle"
+                , Svg.Attributes.dominantBaseline "middle"
+                ]
+                [ Svg.text "Hold button to start!" ]
+            ]
         ]
 
 
@@ -461,70 +452,57 @@ viewGraph ds =
         )
 
 
-viewSampling : Sampling -> Html Msg
-viewSampling sampling =
-    let
-        opacity =
-            case sampling of
-                AnimateIn tr ->
-                    case tr of
-                        InTransition it ->
-                            it.progress
-
-                        EndTransition ->
-                            1.0
-
-                _ ->
-                    1.0
-    in
-    case sampling of
-        Measure measure ->
-            div [ id "measure", Html.Attributes.style "opacity" (String.fromFloat opacity) ]
-                [ svg
-                    [ width "800"
-                    , height "600"
-                    , viewBox "0 0 800 600"
+viewMeasurement : Float -> Maybe Measurement -> Html Msg
+viewMeasurement opacity maybe =
+    div [ id "measure", Html.Attributes.style "opacity" (String.fromFloat opacity) ]
+        [ svg
+            [ width "800"
+            , height "600"
+            , viewBox "0 0 800 600"
+            ]
+            [ g []
+                (g
+                    []
+                    [ circle
+                        [ cx "400"
+                        , cy "300"
+                        , r "200"
+                        , stroke "#86c232"
+                        , fillOpacity "0"
+                        , strokeWidth "2px"
+                        ]
+                        []
                     ]
-                    [ g []
-                        (g
-                            []
-                            [ circle
-                                [ cx "400"
-                                , cy "300"
-                                , r "200"
-                                , stroke "#86c232"
-                                , fillOpacity "0"
-                                , strokeWidth "2px"
-                                ]
+                    :: (case maybe of
+                            Nothing ->
                                 []
-                            ]
-                            :: List.map
-                                (\target ->
-                                    let
-                                        phase =
-                                            toFloat (Time.posixToMillis measure.time - Time.posixToMillis target.time) / 2000.0
-                                    in
-                                    g
-                                        [ transform ("translate(" ++ String.fromFloat (phase * 800.0) ++ ", 0)")
-                                        ]
-                                        [ circle
-                                            [ cx "400"
-                                            , cy "300"
-                                            , r "100"
-                                            , stroke "#86c232"
-                                            , fillOpacity "0"
-                                            , strokeWidth "2px"
-                                            ]
-                                            []
-                                        ]
-                                )
-                                measure.targets
-                        )
-                    ]
-                ]
 
-        _ ->
-            div [] []
+                            Just measurement ->
+                                List.map
+                                    (\target ->
+                                        let
+                                            phase =
+                                                toFloat (Time.posixToMillis measurement.time - Time.posixToMillis target.time) / 2000.0
+                                        in
+                                        g
+                                            [ transform ("translate(" ++ String.fromFloat (phase * 800.0) ++ ", 0)")
+                                            ]
+                                            [ circle
+                                                [ cx "400"
+                                                , cy "300"
+                                                , r "100"
+                                                , stroke "#86c232"
+                                                , fillOpacity "0"
+                                                , strokeWidth "2px"
+                                                ]
+                                                []
+                                            ]
+                                    )
+                                    measurement.targets
+                       )
+                )
+            ]
+        ]
 
 
 applyHit : List Target -> Sample -> List Target
