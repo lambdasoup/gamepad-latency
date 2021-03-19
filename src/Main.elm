@@ -44,7 +44,7 @@ type Msg
     | OnConnectionChanged Gamepad.ConnectionChanged
 
 
-type alias Sample =
+type alias Hit =
     { down : Posix, up : Posix }
 
 
@@ -74,7 +74,7 @@ type alias Measurement =
 
 type alias Target =
     { time : Posix
-    , hits : List Sample
+    , hits : List Hit
     }
 
 
@@ -252,7 +252,7 @@ update msg model =
                                                     | targets =
                                                         applyHit
                                                             measure.targets
-                                                            (Sample since until)
+                                                            (Hit since until)
                                                 }
                                       }
                                     , Cmd.none
@@ -363,10 +363,39 @@ view model =
                     [ Html.text ((targets |> List.length |> String.fromInt) ++ " pushes")
                     ]
                 , div [ id "result" ]
-                    [ targets |> durations |> mean |> viewDuration ]
+                    [ targets
+                        |> analyze
+                        |> (\result ->
+                                case result of
+                                    Ok ds ->
+                                        mean ds |> viewDuration
+
+                                    Err msg ->
+                                        Html.text msg
+                           )
+                    ]
                 , viewGraph targets
                 ]
         )
+
+
+analyze : List Target -> Result String (List ( Duration, Duration ))
+analyze =
+    List.foldr
+        (\target acc ->
+            case target.hits of
+                [ hit ] ->
+                    case acc of
+                        Ok ds ->
+                            Ok (durations hit :: ds)
+
+                        _ ->
+                            acc
+
+                _ ->
+                    Err "Error: Make sure to hit each target exactly once"
+        )
+        (Ok [])
 
 
 viewLaunch : Float -> Float -> Html Msg
@@ -417,7 +446,7 @@ viewGamepads gamepads =
 
 
 viewGraph : List Target -> Html Msg
-viewGraph ds =
+viewGraph targets =
     svg
         [ width "800"
         , height "400"
@@ -433,22 +462,32 @@ viewGraph ds =
             , strokeWidth "1"
             ]
             []
-            :: List.indexedMap
-                (\i ( Duration t1, Duration t2 ) ->
-                    let
-                        y =
-                            500 // List.length ds * i
-                    in
-                    Svg.rect
-                        [ x (String.fromInt (t1 + 500))
-                        , Svg.Attributes.y (String.fromInt y)
-                        , height "10"
-                        , width (String.fromInt (t2 - t1))
-                        , fill "#f00"
-                        ]
-                        []
+            :: List.concat
+                (List.indexedMap
+                    (\i target ->
+                        let
+                            y =
+                                500 // List.length targets * i
+                        in
+                        List.map
+                            (\hit ->
+                                let
+                                    ( Duration t1, Duration t2 ) =
+                                        durations hit
+                                in
+                                Svg.rect
+                                    [ x (String.fromInt (t1 + 500))
+                                    , Svg.Attributes.y (String.fromInt y)
+                                    , height "10"
+                                    , width (String.fromInt (t2 - t1))
+                                    , fill "#f00"
+                                    ]
+                                    []
+                            )
+                            target.hits
+                    )
+                    targets
                 )
-                (durations ds)
         )
 
 
@@ -505,7 +544,7 @@ viewMeasurement opacity maybe =
         ]
 
 
-applyHit : List Target -> Sample -> List Target
+applyHit : List Target -> Hit -> List Target
 applyHit targets sample =
     List.map
         (\target ->
@@ -522,8 +561,8 @@ applyHit targets sample =
         targets
 
 
-durations : List Target -> List ( Duration, Duration )
-durations targets =
+durations : Hit -> ( Duration, Duration )
+durations hit =
     let
         duration : Posix -> Duration
         duration =
@@ -544,13 +583,7 @@ durations targets =
                 in
                 Duration dist
     in
-    List.concat
-        (List.map
-            (\target ->
-                List.map (\hit -> ( duration hit.down, duration hit.up )) target.hits
-            )
-            targets
-        )
+    ( duration hit.down, duration hit.up )
 
 
 mean : List ( Duration, Duration ) -> Duration
