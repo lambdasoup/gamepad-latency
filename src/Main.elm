@@ -360,7 +360,7 @@ view model =
 
             Result targets ->
                 [ div [ id "info" ]
-                    [ Html.text ((targets |> List.length |> String.fromInt) ++ " pushes")
+                    [ Html.text ((targets |> List.length |> String.fromInt) ++ " targets")
                     ]
                 , div [ id "result" ]
                     [ targets
