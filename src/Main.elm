@@ -387,7 +387,7 @@ analyze =
                 [ hit ] ->
                     case acc of
                         Ok ds ->
-                            Ok (durations hit :: ds)
+                            Ok (durations target.time hit :: ds)
 
                         _ ->
                             acc
@@ -473,7 +473,7 @@ viewGraph targets =
                             (\hit ->
                                 let
                                     ( Duration t1, Duration t2 ) =
-                                        durations hit
+                                        durations target.time hit
                                 in
                                 Svg.rect
                                     [ x (String.fromInt (t1 + 500))
@@ -561,25 +561,21 @@ applyHit targets sample =
         targets
 
 
-durations : Hit -> ( Duration, Duration )
-durations hit =
+durations : Posix -> Hit -> ( Duration, Duration )
+durations target hit =
     let
         duration : Posix -> Duration
         duration =
-            \t ->
+            \hitT ->
                 let
-                    millis =
-                        Time.posixToMillis t
+                    hitMillis =
+                        Time.posixToMillis hitT
 
-                    mod =
-                        modBy 1000 millis
+                    targetMillis =
+                        Time.posixToMillis target
 
                     dist =
-                        if mod < 500 then
-                            mod
-
-                        else
-                            mod - 1000
+                        hitMillis - targetMillis
                 in
                 Duration dist
     in
