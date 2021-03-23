@@ -535,10 +535,29 @@ viewMeasurement opacity maybe =
             ]
             [ g []
                 (g
-                    []
-                    [ circle
-                        [ cx "400"
-                        , cy "300"
+                    [ transform "translate(400, 300)"
+                    ]
+                    [ line
+                        [ x1 "-200"
+                        , x2 "200"
+                        , y1 "-200"
+                        , y2 "200"
+                        , stroke lightGreen
+                        , strokeWidth "2px"
+                        ]
+                        []
+                    , line
+                        [ x1 "-200"
+                        , x2 "200"
+                        , y1 "200"
+                        , y2 "-200"
+                        , stroke lightGreen
+                        , strokeWidth "2px"
+                        ]
+                        []
+                    , circle
+                        [ cx "0"
+                        , cy "0"
                         , r "200"
                         , stroke lightGreen
                         , fillOpacity "0"
@@ -556,14 +575,33 @@ viewMeasurement opacity maybe =
                                         let
                                             phase =
                                                 toFloat (Time.posixToMillis measurement.time - Time.posixToMillis target.time) / 2000.0
+
+                                            x =
+                                                400.0 + phase * 800
                                         in
                                         g
-                                            [ transform ("translate(" ++ String.fromFloat (phase * 800.0) ++ ", 0)")
+                                            [ transform ("translate(" ++ String.fromFloat x ++ ", 300)")
                                             ]
-                                            [ circle
-                                                [ cx "400"
-                                                , cy "300"
-                                                , r "100"
+                                            [ line
+                                                [ x1 "-100"
+                                                , x2 "100"
+                                                , y1 "-100"
+                                                , y2 "100"
+                                                , stroke lightGreen
+                                                , strokeWidth "2px"
+                                                ]
+                                                []
+                                            , line
+                                                [ x1 "-100"
+                                                , x2 "100"
+                                                , y1 "100"
+                                                , y2 "-100"
+                                                , stroke lightGreen
+                                                , strokeWidth "2px"
+                                                ]
+                                                []
+                                            , circle
+                                                [ r "100"
                                                 , stroke lightGreen
                                                 , fillOpacity "0"
                                                 , strokeWidth "2px"
