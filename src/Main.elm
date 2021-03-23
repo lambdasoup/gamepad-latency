@@ -545,15 +545,15 @@ viewMeasurement opacity maybe =
 
 
 applyHit : List Target -> Hit -> List Target
-applyHit targets sample =
+applyHit targets hit =
     List.map
         (\target ->
             let
                 diff =
-                    Time.posixToMillis target.time - Time.posixToMillis sample.down
+                    Time.posixToMillis target.time - Time.posixToMillis hit.down
             in
             if abs diff < 500 then
-                { target | hits = sample :: target.hits }
+                { target | hits = hit :: target.hits }
 
             else
                 target
