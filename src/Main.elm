@@ -458,37 +458,71 @@ viewGraph targets =
             , y1 "0"
             , x2 "500"
             , y2 "500"
-            , stroke "#bbb"
+            , stroke darkGrey
             , strokeWidth "1"
             ]
             []
-            :: List.concat
-                (List.indexedMap
-                    (\i target ->
-                        let
-                            y =
-                                500 // List.length targets * i
-                        in
-                        List.map
-                            (\hit ->
-                                let
-                                    ( Duration t1, Duration t2 ) =
-                                        durations target.time hit
-                                in
-                                Svg.rect
-                                    [ x (String.fromInt (t1 + 500))
-                                    , Svg.Attributes.y (String.fromInt y)
-                                    , height "10"
-                                    , width (String.fromInt (t2 - t1))
-                                    , fill "#f00"
-                                    ]
-                                    []
-                            )
-                            target.hits
-                    )
-                    targets
+            :: List.indexedMap
+                (\i target ->
+                    let
+                        y =
+                            450 - (450 // List.length targets * i)
+                    in
+                    g
+                        [ transform ("translate(500, " ++ String.fromInt y ++ ")")
+                        ]
+                        (viewTarget target)
                 )
+                targets
         )
+
+
+viewTarget : Target -> List (Svg Msg)
+viewTarget target =
+    List.map
+        (\hit ->
+            let
+                ( Duration t1, Duration t2 ) =
+                    durations target.time hit
+            in
+            g []
+                [ Svg.circle
+                    [ cx (String.fromInt t1)
+                    , r "10"
+                    , stroke lightGreen
+                    , fill lightGrey
+                    ]
+                    []
+                , Svg.line
+                    [ x1 (String.fromInt t1)
+                    , width "2"
+                    , x2 (String.fromInt t2)
+                    , stroke darkGreen
+                    ]
+                    []
+                ]
+        )
+        target.hits
+
+
+darkGreen : String
+darkGreen =
+    "#61892f"
+
+
+lightGreen : String
+lightGreen =
+    "#86c232"
+
+
+darkGrey : String
+darkGrey =
+    "#474B4f"
+
+
+lightGrey : String
+lightGrey =
+    "#6b6e70"
 
 
 viewMeasurement : Float -> Maybe Measurement -> Html Msg
@@ -506,7 +540,7 @@ viewMeasurement opacity maybe =
                         [ cx "400"
                         , cy "300"
                         , r "200"
-                        , stroke "#86c232"
+                        , stroke lightGreen
                         , fillOpacity "0"
                         , strokeWidth "2px"
                         ]
@@ -530,7 +564,7 @@ viewMeasurement opacity maybe =
                                                 [ cx "400"
                                                 , cy "300"
                                                 , r "100"
-                                                , stroke "#86c232"
+                                                , stroke lightGreen
                                                 , fillOpacity "0"
                                                 , strokeWidth "2px"
                                                 ]
