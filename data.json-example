@@ -1,4 +1,5 @@
 {
     "privacy_policy": "https://example.com/privacy_policy_gamepad-latency",
-    "imprint": "https://example.com/imprint"
+    "imprint": "https://example.com/imprint",
+    "source": "https://github.com/example"
 }
