@@ -5,3 +5,11 @@ Live version: http://gamepad-latency.lambdasoup.com
 
 Web app which can help identify gamepad input latency issues
 
+Building
+--------
+
+- make
+- jq
+- mustache
+- elm
+

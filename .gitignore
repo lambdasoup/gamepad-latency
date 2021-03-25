@@ -2,6 +2,7 @@
 /elm-stuff
 .pid
 /public
+/src/data.json
 
 # firebase
 .firebase/
