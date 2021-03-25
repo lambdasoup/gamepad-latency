@@ -360,7 +360,7 @@ view model =
 
             Result targets ->
                 [ div [ id "info" ]
-                    [ Html.text ((targets |> List.length |> String.fromInt) ++ " targets")
+                    [ Html.text ((targets |> List.length |> String.fromInt) ++ " targets - reload page to re-run.")
                     ]
                 , div [ id "result" ]
                     [ targets
