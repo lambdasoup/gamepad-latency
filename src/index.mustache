@@ -30,12 +30,15 @@
             }
 
             p {
-                color: #86c232;
                 text-align: center;
             }
 
             h1 {
                 font-size: 50px;
+                text-align: center;
+            }
+
+            h2 {
                 text-align: center;
             }
 
@@ -54,6 +57,23 @@
 
             #graph {
                 flex-grow: 1;
+            }
+
+            #faq {
+                margin-bottom: 80px;
+            }
+
+            #faq ul {
+                list-style-type: none;
+                margin-bottom: 40px;
+            }
+
+            #faq ul li p:nth-child(1) {
+                font-weight: bold;
+            }
+
+            #faq ul li p:nth-child(2) {
+                font-style: italic;
             }
 
             #gamepads {
@@ -128,9 +148,21 @@
                 });
             });
         </script>
+
+
+        <section id="faq">
+            <h2>faq</h2>
+            <ul>
+                <li>
+                    <p>Q: What does this app measure?</p>
+                    <p>A: The measured value is the time it takes for a button click to propagate into the browser.</p>
+                </li>
+            </ul>
+        </section>
+
         <section id="footer">
             © 2021 lambdasoup.com
-            | Licensed under AGPL3
+            | Licensed under GPL
             (<a href="{{ source }}"
                 >source</a
             >)
